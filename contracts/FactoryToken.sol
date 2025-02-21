@@ -1,9 +1,11 @@
+// FactoryToken.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./ERC20Token.sol"; // Import ERC20Token contract
 
 contract FactoryToken is Ownable(msg.sender) {
     uint256 constant FIXED_TOTAL_SUPPLY = 1_000_000_000 * 10 ** 18; // 1B dengan 18 desimal
@@ -48,24 +50,32 @@ contract FactoryToken is Ownable(msg.sender) {
         string memory _socialMedia,
         uint256 _paymentAmount
     ) external {
+        // Add allowance check
+        require(
+            idleToken.allowance(msg.sender, address(this)) >= _paymentAmount,
+            "IDLE allowance insufficient"
+        );
         // Verifikasi bahwa pengirim memiliki cukup saldo IDLE
         require(
             idleToken.balanceOf(msg.sender) >= _paymentAmount,
             "Saldo IDLE tidak cukup"
         );
-
-        // Transfer IDLE dari pengirim ke kontrak ini
+        // Transfer full 10 IDLE dari user ke contract
         idleToken.transferFrom(msg.sender, address(this), _paymentAmount);
 
-        // Deploy token baru
+        // Kirim 10% dari jumlah yang diterima contract ke wallet
+        uint256 fee = _paymentAmount / 10;
+        idleToken.transfer(0xB53F9688e99D34EF93392F88fD01d6E5651d8CfA, fee);
+
+        // Sisa 9 IDLE tetap di contract (10 - 1)
+        // Deploy token baru dengan supply ke factory contract
         ERC20Token newToken = new ERC20Token(
             _name,
             _ticker,
             FIXED_TOTAL_SUPPLY,
-            msg.sender
+            address(this)
         );
         address tokenAddr = address(newToken);
-
         // Simpan informasi token
         TokenInfo memory newTokenInfo = TokenInfo({
             name: _name,
@@ -77,10 +87,8 @@ contract FactoryToken is Ownable(msg.sender) {
             totalSupply: FIXED_TOTAL_SUPPLY,
             tokenAddress: tokenAddr
         });
-
         tokens.push(newTokenInfo);
         tokenDetails[tokenAddr] = newTokenInfo;
-
         emit TokenCreated(
             msg.sender,
             tokenAddr,
@@ -96,25 +104,22 @@ contract FactoryToken is Ownable(msg.sender) {
         TokenInfo memory tokenInfo = tokenDetails[_tokenAddress];
         require(tokenInfo.owner != address(0), "Token tidak ditemukan");
 
-        // Tentukan harga token dalam IDLE
-        uint256 tokenPrice = 10 * 10 ** 18; // Asumsikan 1 token = 10 IDLE
+        // Tentukan harga token dalam IDLE (10 IDLE per 1 token)
+        uint256 tokenPrice = 10 * 10 ** 18;
 
-        // Hitung biaya pembelian token
-        uint256 cost = _amount * tokenPrice;
+        // Perbaiki perhitungan biaya dengan membagi oleh desimal
+        uint256 cost = (_amount * tokenPrice) / 10 ** 18; // Add division by 1e18
 
-        // Verifikasi bahwa pembeli memiliki cukup saldo IDLE
+        // Add allowance check
         require(
-            idleToken.balanceOf(msg.sender) >= cost,
-            "Saldo IDLE tidak cukup"
+            idleToken.allowance(msg.sender, address(this)) >= cost,
+            "IDLE allowance insufficient"
         );
-
         // Transfer IDLE dari pembeli ke kontrak ini
         idleToken.transferFrom(msg.sender, address(this), cost);
-
         // Transfer token yang dibeli ke pembeli
         ERC20Token token = ERC20Token(_tokenAddress);
         token.transfer(msg.sender, _amount);
-
         emit TokensBought(msg.sender, _amount, cost);
     }
 
@@ -136,17 +141,5 @@ contract FactoryToken is Ownable(msg.sender) {
     ) external view returns (TokenInfo memory) {
         require(_index < tokens.length, "Invalid index");
         return tokens[_index];
-    }
-}
-
-// ERC20 Token untuk dibuat oleh Factory
-contract ERC20Token is ERC20, Ownable {
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        uint256 _initialSupply,
-        address _owner
-    ) ERC20(_name, _symbol) Ownable(_owner) {
-        _mint(_owner, _initialSupply); // Mint total supply ke pemilik
     }
 }

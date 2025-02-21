@@ -11,6 +11,9 @@ const config: HardhatUserConfig = {
       url: "http://127.0.0.1:8545",
       chainId: 31337,
     },
+    hardhat: {
+      chainId: 31337,
+    },
     mantaPacificTestnet: {
       url: "https://pacific-rpc.sepolia-testnet.manta.network/http",
       accounts: [PRIVATE_KEY],
