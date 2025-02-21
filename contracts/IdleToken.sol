@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract IdleToken is ERC20, Ownable {
     mapping(address => bool) public whitelist;
-    string private _tokenURI; 
+    string private _tokenURI;
 
     event TokenBurned(address indexed burner, uint256 amount);
     event WhitelistUpdated(address indexed user, bool status);
@@ -15,7 +15,7 @@ contract IdleToken is ERC20, Ownable {
     constructor(
         address initialOwner
     ) ERC20("Idle", "IDL") Ownable(initialOwner) {
-        _mint(initialOwner, 1000000000* 10 ** decimals());
+        _mint(initialOwner, 1000000000 * 10 ** decimals());
     }
 
     function mint(address to, uint256 amount) external onlyOwner {
@@ -30,7 +30,10 @@ contract IdleToken is ERC20, Ownable {
 
     function claimToken(address to, uint256 amount) external onlyOwner {
         require(whitelist[to], "Not in whitelist");
-        require(balanceOf(owner()) >= amount, "Not enough tokens in owner balance");
+        require(
+            balanceOf(owner()) >= amount,
+            "Not enough tokens in owner balance"
+        );
         _transfer(owner(), to, amount);
     }
 
