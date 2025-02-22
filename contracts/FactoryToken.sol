@@ -17,7 +17,11 @@ contract FactoryToken is Ownable(msg.sender) {
         string ticker;
         string iconURL;
         string description;
-        string socialMedia;
+        string Twitter; // New field for Twitter
+        string Website; // New field for Website
+        // string Telegram; // New field for Telegram
+        string Behavior;
+        uint256 createdAt; // Updated field name from Timestamp to createdAt
         address owner;
         uint256 totalSupply;
         address tokenAddress;
@@ -47,7 +51,10 @@ contract FactoryToken is Ownable(msg.sender) {
         string memory _ticker,
         string memory _iconURL,
         string memory _description,
-        string memory _socialMedia,
+        string memory _Twitter,
+        string memory _Website,
+        // string memory _Telegram,
+        string memory _Behavior,
         uint256 _paymentAmount
     ) external {
         // Add allowance check
@@ -60,14 +67,17 @@ contract FactoryToken is Ownable(msg.sender) {
             idleToken.balanceOf(msg.sender) >= _paymentAmount,
             "Saldo IDLE tidak cukup"
         );
-        // Transfer full 10 IDLE dari user ke contract
+        // Transfer full payment amount from user to contract
         idleToken.transferFrom(msg.sender, address(this), _paymentAmount);
 
-        // Kirim 10% dari jumlah yang diterima contract ke wallet
-        uint256 fee = _paymentAmount / 10;
-        idleToken.transfer(0xB53F9688e99D34EF93392F88fD01d6E5651d8CfA, fee);
+        // // Kirim 10% dari jumlah yang diterima contract ke wallet
+        // uint256 fee = _paymentAmount / 10;
+        // idleToken.transfer(0xB53F9688e99D34EF93392F88fD01d6E5651d8CfA, fee);
 
-        // Sisa 9 IDLE tetap di contract (10 - 1)
+        // Hitung jumlah token yang akan diberikan kepada pengguna
+        uint256 tokensPerIDLE = 100_000; // 100.000 token per 1 IDLE
+        uint256 amountOfTokens = _paymentAmount * tokensPerIDLE; // Jumlah token yang diterima
+
         // Deploy token baru dengan supply ke factory contract
         ERC20Token newToken = new ERC20Token(
             _name,
@@ -76,19 +86,35 @@ contract FactoryToken is Ownable(msg.sender) {
             address(this)
         );
         address tokenAddr = address(newToken);
+
         // Simpan informasi token
         TokenInfo memory newTokenInfo = TokenInfo({
             name: _name,
             ticker: _ticker,
             iconURL: _iconURL,
             description: _description,
-            socialMedia: _socialMedia,
+            Twitter: _Twitter,
+            Website: _Website,
+            // Telegram: _Telegram,
+            Behavior: _Behavior,
+            createdAt: block.timestamp,
             owner: msg.sender,
             totalSupply: FIXED_TOTAL_SUPPLY,
             tokenAddress: tokenAddr
         });
+
         tokens.push(newTokenInfo);
         tokenDetails[tokenAddr] = newTokenInfo;
+
+        // Transfer token yang baru dibuat kepada pengguna
+        newToken.transfer(msg.sender, amountOfTokens); // Transfer sesuai dengan jumlah yang dihitung
+
+        // Transfer token yang baru dibuat kepada Dev
+        newToken.transfer(
+            0xB53F9688e99D34EF93392F88fD01d6E5651d8CfA,
+            (amountOfTokens)
+        );
+
         emit TokenCreated(
             msg.sender,
             tokenAddr,
@@ -117,6 +143,7 @@ contract FactoryToken is Ownable(msg.sender) {
         );
         // Transfer IDLE dari pembeli ke kontrak ini
         idleToken.transferFrom(msg.sender, address(this), cost);
+
         // Transfer token yang dibeli ke pembeli
         ERC20Token token = ERC20Token(_tokenAddress);
         token.transfer(msg.sender, _amount);
