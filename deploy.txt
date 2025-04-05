@@ -1,0 +1,1 @@
+forge create --rpc-url https://eth-sepolia.g.alchemy.com/v2/uXnyCu-59hxPNS-5USSebL3eum_qHs_p --private-key 0xb2a4beeb5db5eb35c373aec6c8d38a7cf257caaffb671881ee7bc414c1d666a0 src/Scm2.sol:SupplyChainManagement --etherscan-api-key IB97Q9W2ZQIB1TI4NXSWK5VZIYQ26G7CZU --broadcast --verify

@@ -2,76 +2,113 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Swap is Ownable(msg.sender) {
-    IERC20 public token;
-    uint256 public totalLiquidity;
-    mapping(address => uint256) public liquidity;
+contract Swap {
+    IERC20 public immutable IdleToken;
+    mapping(address => uint256) public tokenBalances;
+    uint256 public ethBalance;
 
-    event LiquidityAdded(address indexed provider, uint256 ethAmount, uint256 tokenAmount);
-    event LiquidityRemoved(address indexed provider, uint256 ethAmount, uint256 tokenAmount);
-    event Swapped(address indexed user, uint256 ethAmount, uint256 tokenAmount);
+    event LiquidityAdded(
+        address indexed provider,
+        address token,
+        uint256 amount
+    );
+    event LiquidityRemoved(
+        address indexed provider,
+        address token,
+        uint256 amount
+    );
+    event Swapped(
+        address indexed user,
+        address fromToken,
+        address toToken,
+        uint256 amountIn,
+        uint256 amountOut
+    );
 
-    constructor(address _tokenAddress) {
-        token = IERC20(_tokenAddress);
+    constructor(address _idleTokenAddress) {
+        require(_idleTokenAddress != address(0), "Invalid token address");
+        IdleToken = IERC20(_idleTokenAddress);
     }
 
-    function addLiquidity(uint256 tokenAmount) external payable {
-        require(msg.value > 0, "Must provide ETH");
-        require(tokenAmount > 0, "Must provide tokens");
-        
-        token.transferFrom(msg.sender, address(this), tokenAmount);
-        liquidity[msg.sender] += msg.value;
-        totalLiquidity += msg.value;
-        
-        emit LiquidityAdded(msg.sender, msg.value, tokenAmount);
-    }
-
-    function removeLiquidity(uint256 ethAmount) external {
-        require(ethAmount > 0, "Must specify ETH amount");
-        require(liquidity[msg.sender] >= ethAmount, "Insufficient liquidity");
-
-        uint256 tokenAmount = (ethAmount * token.balanceOf(address(this))) / address(this).balance;
-        liquidity[msg.sender] -= ethAmount;
-        totalLiquidity -= ethAmount;
-        
-        payable(msg.sender).transfer(ethAmount);
-        token.transfer(msg.sender, tokenAmount);
-        
-        emit LiquidityRemoved(msg.sender, ethAmount, tokenAmount);
-    }
-
-    function getTokenBalance() external view returns (uint256) {
-        return token.balanceOf(address(this));
-    }
-
-    function getEthBalance() external view returns (uint256) {
-        return address(this).balance;
-    }
-
-    function calculateSwap(uint256 amount, bool isEthToToken) public view returns (uint256) {
-        require(amount > 0, "Amount must be greater than 0");
-
-        uint256 tokenReserve = token.balanceOf(address(this));
-        uint256 ethReserve = address(this).balance;
-
-        if (isEthToToken) {
-            return (amount * tokenReserve) / (ethReserve + amount);
+    function addLiquidity(address token, uint256 amount) external payable {
+        if (token == address(0)) {
+            require(msg.value > 0, "ETH amount required");
+            ethBalance += msg.value;
         } else {
-            return (amount * ethReserve) / (tokenReserve + amount);
+            require(amount > 0, "Token amount required");
+            require(msg.value == 0, "ETH not required for tokens");
+            IERC20(token).transferFrom(msg.sender, address(this), amount);
+            tokenBalances[token] += amount;
         }
+        emit LiquidityAdded(msg.sender, token, amount);
     }
 
-    function swapTokenToEth(uint256 tokenAmount) external {
-        require(tokenAmount > 0, "Must send tokens");
+    function removeLiquidity(address token, uint256 amount) external {
+        if (token == address(0)) {
+            require(ethBalance >= amount, "Insufficient ETH liquidity");
+            ethBalance -= amount;
+            payable(msg.sender).transfer(amount);
+        } else {
+            require(
+                tokenBalances[token] >= amount,
+                "Insufficient token liquidity"
+            );
+            tokenBalances[token] -= amount;
+            IERC20(token).transfer(msg.sender, amount);
+        }
+        emit LiquidityRemoved(msg.sender, token, amount);
+    }
 
-        uint256 ethAmount = calculateSwap(tokenAmount, false);
-        require(address(this).balance >= ethAmount, "Insufficient ETH in contract");
+    function calculateSwap(
+        address fromToken,
+        address toToken,
+        uint256 amountIn
+    ) public view returns (uint256) {
+        uint256 fromBalance = fromToken == address(0)
+            ? ethBalance
+            : tokenBalances[fromToken];
+        uint256 toBalance = toToken == address(0)
+            ? ethBalance
+            : tokenBalances[toToken];
 
-        token.transferFrom(msg.sender, address(this), tokenAmount);
-        payable(msg.sender).transfer(ethAmount);
+        require(fromBalance > 0 && toBalance > 0, "No liquidity");
+        return (amountIn * toBalance) / (fromBalance + amountIn);
+    }
 
-        emit Swapped(msg.sender, ethAmount, tokenAmount);
+    function swap(
+        address fromToken,
+        address toToken,
+        uint256 amountIn
+    ) external payable {
+        require(fromToken != toToken, "Cannot swap same token");
+        require(amountIn > 0, "Invalid amount");
+
+        uint256 amountOut = calculateSwap(fromToken, toToken, amountIn);
+        require(amountOut > 0, "Zero output amount");
+
+        if (fromToken == address(0)) {
+            require(msg.value == amountIn, "Incorrect ETH sent");
+            ethBalance += amountIn;
+        } else {
+            require(msg.value == 0, "ETH not needed");
+            IERC20(fromToken).transferFrom(msg.sender, address(this), amountIn);
+            tokenBalances[fromToken] += amountIn;
+        }
+
+        if (toToken == address(0)) {
+            require(ethBalance >= amountOut, "Insufficient ETH liquidity");
+            ethBalance -= amountOut;
+            payable(msg.sender).transfer(amountOut);
+        } else {
+            require(
+                tokenBalances[toToken] >= amountOut,
+                "Insufficient token liquidity"
+            );
+            tokenBalances[toToken] -= amountOut;
+            IERC20(toToken).transfer(msg.sender, amountOut);
+        }
+
+        emit Swapped(msg.sender, fromToken, toToken, amountIn, amountOut);
     }
 }

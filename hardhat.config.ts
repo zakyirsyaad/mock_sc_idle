@@ -19,10 +19,28 @@ const config: HardhatUserConfig = {
       accounts: [PRIVATE_KEY],
       chainId: 3441006,
     },
+    sonicTestnet: {
+      url: "https://rpc.blaze.soniclabs.com",
+      accounts: [PRIVATE_KEY],
+      chainId: 57054,
+    },
+    sepolia: {
+      url: "https://sepolia.drpc.org",
+      accounts: [PRIVATE_KEY],
+      chainId: 11_155_111,
+    },
+    opencampus: {
+      url: `https://rpc.open-campus-codex.gelato.digital/`,
+      accounts: [PRIVATE_KEY],
+      chainId: 656476,
+    },
   },
   etherscan: {
     apiKey: {
       mantaPacificTestnet: "any",
+      sonicTestnet: "SBTRRBEV9FWZFVAKBIKDYY5VY42B3Z4SKA",
+      sepolia: "IB97Q9W2ZQIB1TI4NXSWK5VZIYQ26G7CZU",
+      opencampus: "XXX",
     },
     customChains: [
       {
@@ -31,6 +49,30 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://pacific-explorer.sepolia-testnet.manta.network/api",
           browserURL: "https://pacific-explorer.sepolia-testnet.manta.network",
+        },
+      },
+      {
+        network: "sonicTestnet",
+        chainId: 57054,
+        urls: {
+          apiURL: "https://api-testnet.sonicscan.org/api",
+          browserURL: "https://testnet.sonicscan.org",
+        },
+      },
+      {
+        network: "sepolia",
+        chainId: 11_155_111,
+        urls: {
+          apiURL: "https://api-sepolia.etherscan.io/api",
+          browserURL: "https://sepolia.etherscan.io",
+        },
+      },
+      {
+        network: "opencampus",
+        chainId: 656476,
+        urls: {
+          apiURL: "https://edu-chain-testnet.blockscout.com/api",
+          browserURL: "https://edu-chain-testnet.blockscout.com",
         },
       },
     ],

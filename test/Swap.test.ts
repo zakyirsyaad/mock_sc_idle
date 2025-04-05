@@ -1,48 +1,98 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 
-describe("Swap", function () {
-    let Swap: any, swap: any, IdleToken: any, idleToken: any, owner: any, addr1: any, addr2: any;
+describe("SwapToken", function () {
+  let SwapToken, swapToken, owner, addr1, addr2, testToken;
 
-    beforeEach(async function () {
-        [owner, addr1, addr2] = await ethers.getSigners();
+  beforeEach(async function () {
+    [owner, addr1, addr2] = await ethers.getSigners();
 
-        // Deploy Token IDLE
-        IdleToken = await ethers.getContractFactory("IdleToken");
-        idleToken = await IdleToken.deploy(owner.address);
-        await idleToken.waitForDeployment();
+    // Deploy test ERC20 token
+    const TestToken = await ethers.getContractFactory("TestToken");
+    testToken = await TestToken.deploy("Test Token", "TTK", 1000000);
+    await testToken.waitForDeployment();
 
-        // Deploy Swap
-        Swap = await ethers.getContractFactory("Swap");
-        swap = await Swap.deploy(idleToken.target);
-        await swap.waitForDeployment();
+    // Deploy SwapToken contract
+    SwapToken = await ethers.getContractFactory("SwapToken");
+    swapToken = await SwapToken.deploy();
+    await swapToken.waitForDeployment();
 
-        // Mint dan Approve Token IDLE ke addr1
-        await idleToken.mint(addr1.address, ethers.parseEther("1000"));
-        await idleToken.connect(addr1).approve(swap.target, ethers.parseEther("1000"));
+    // Approve SwapToken contract to spend addr1's tokens
+    const token = await ethers.getContractAt(
+      "TestToken",
+      await testToken.getAddress()
+    );
+    await token.transfer(addr1.address, 10000);
+    await token.approve(await swapToken.getAddress(), 5000);
+  });
 
-        // Tambahkan lebih banyak likuiditas dari owner
-        await idleToken.approve(swap.target, ethers.parseEther("500"));
-        await swap.addLiquidity(ethers.parseEther("500"), { value: ethers.parseEther("10") }); // Ubah jadi 10 ETH
-    });
+  it("Should deploy with correct initial state", async function () {
+    expect(
+      await ethers.provider.getBalance(await swapToken.getAddress())
+    ).to.equal(0);
+  });
 
-    it("should swap Token to ETH", async function () {
-        // Cek ETH sebelum swap
-        const ethBefore = await ethers.provider.getBalance(swap.target);
-        console.log("ETH sebelum swap:", ethers.formatEther(ethBefore));
+  it("Should allow adding ETH liquidity", async function () {
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(ethers.ZeroAddress, 0, { value: ethers.parseEther("1") });
+    expect(
+      await ethers.provider.getBalance(await swapToken.getAddress())
+    ).to.equal(ethers.parseEther("1"));
+  });
 
-        // Cek jumlah ETH yang akan didapat
-        const amountOut = await swap.calculateSwap(ethers.parseEther("1"), false);
-        console.log("ETH yang akan diberikan:", ethers.formatEther(amountOut));
+  it("Should allow adding ERC20 token liquidity", async function () {
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(await testToken.getAddress(), 5000);
+    expect(await testToken.balanceOf(await swapToken.getAddress())).to.equal(
+      5000
+    );
+  });
 
-        // Pastikan addr1 punya cukup token untuk swap
-        await swap.connect(addr1).swapTokenToEth(ethers.parseEther("100"));
+  it("Should allow removing liquidity", async function () {
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(ethers.ZeroAddress, 0, { value: ethers.parseEther("1") });
+    await swapToken
+      .connect(addr1)
+      .removeLiquidity(ethers.ZeroAddress, ethers.parseEther("0.5"));
+    expect(
+      await ethers.provider.getBalance(await swapToken.getAddress())
+    ).to.equal(ethers.parseEther("0.5"));
+  });
 
-        const ethAfter = await ethers.provider.getBalance(swap.target);
-        console.log("ETH setelah swap:", ethers.formatEther(ethAfter));
+  it("Should correctly calculate swap amounts", async function () {
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(await testToken.getAddress(), 5000);
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(ethers.ZeroAddress, 0, { value: ethers.parseEther("1") });
 
-        // Addr1 harus menerima ETH
-        const ethBalance = await ethers.provider.getBalance(addr1.address);
-        expect(ethBalance).to.be.gt(ethers.parseEther("0.9"));
-    });
+    const swapAmount = await swapToken.calculateSwap(
+      await testToken.getAddress(),
+      ethers.ZeroAddress,
+      1000
+    );
+    expect(swapAmount).to.be.gt(0);
+  });
+
+  it("Should allow swapping tokens for ETH", async function () {
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(await testToken.getAddress(), 5000);
+    await swapToken
+      .connect(addr1)
+      .addLiquidity(ethers.ZeroAddress, 0, { value: ethers.parseEther("1") });
+
+    const initialBalance = await ethers.provider.getBalance(addr1.address);
+
+    await swapToken
+      .connect(addr1)
+      .swap(await testToken.getAddress(), ethers.ZeroAddress, 1000);
+
+    const newBalance = await ethers.provider.getBalance(addr1.address);
+    expect(newBalance).to.be.gt(initialBalance);
+  });
 });

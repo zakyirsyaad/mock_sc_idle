@@ -1,6 +1,5 @@
-// FactoryToken.sol
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -70,10 +69,6 @@ contract FactoryToken is Ownable(msg.sender) {
         // Transfer full payment amount from user to contract
         idleToken.transferFrom(msg.sender, address(this), _paymentAmount);
 
-        // // Kirim 10% dari jumlah yang diterima contract ke wallet
-        // uint256 fee = _paymentAmount / 10;
-        // idleToken.transfer(0xB53F9688e99D34EF93392F88fD01d6E5651d8CfA, fee);
-
         // Hitung jumlah token yang akan diberikan kepada pengguna
         uint256 tokensPerIDLE = 100_000; // 100.000 token per 1 IDLE
         uint256 amountOfTokens = _paymentAmount * tokensPerIDLE; // Jumlah token yang diterima
@@ -124,32 +119,6 @@ contract FactoryToken is Ownable(msg.sender) {
         );
     }
 
-    // Fungsi untuk membeli token menggunakan IDLE
-    function buyTokens(address _tokenAddress, uint256 _amount) external {
-        // Ambil informasi token yang ingin dibeli
-        TokenInfo memory tokenInfo = tokenDetails[_tokenAddress];
-        require(tokenInfo.owner != address(0), "Token tidak ditemukan");
-
-        // Tentukan harga token dalam IDLE (10 IDLE per 1 token)
-        uint256 tokenPrice = 10 * 10 ** 18;
-
-        // Perbaiki perhitungan biaya dengan membagi oleh desimal
-        uint256 cost = (_amount * tokenPrice) / 10 ** 18; // Add division by 1e18
-
-        // Add allowance check
-        require(
-            idleToken.allowance(msg.sender, address(this)) >= cost,
-            "IDLE allowance insufficient"
-        );
-        // Transfer IDLE dari pembeli ke kontrak ini
-        idleToken.transferFrom(msg.sender, address(this), cost);
-
-        // Transfer token yang dibeli ke pembeli
-        ERC20Token token = ERC20Token(_tokenAddress);
-        token.transfer(msg.sender, _amount);
-        emit TokensBought(msg.sender, _amount, cost);
-    }
-
     // Fungsi untuk mengambil semua token yang telah dibuat
     function getAllTokens() external view returns (TokenInfo[] memory) {
         return tokens;
@@ -168,5 +137,51 @@ contract FactoryToken is Ownable(msg.sender) {
     ) external view returns (TokenInfo memory) {
         require(_index < tokens.length, "Invalid index");
         return tokens[_index];
+    }
+
+    // Fungsi baca untuk menghitung jumlah token yang didapat dari swap
+    function calculateSwap(
+        address fromToken,
+        address toToken,
+        uint256 amountIn
+    ) public view returns (uint256 amountOut) {
+        require(fromToken != toToken, "Cannot swap same token");
+
+        uint256 reserveFrom = IERC20(fromToken).balanceOf(address(this));
+        uint256 reserveTo = IERC20(toToken).balanceOf(address(this));
+        require(reserveFrom > 0 && reserveTo > 0, "Insufficient liquidity");
+
+        // Sederhana: tidak ada fee, gunakan proporsi cadangan
+        amountOut = (amountIn * reserveTo) / (reserveFrom + amountIn);
+    }
+
+    // Fungsi tulis untuk melakukan swap antar token
+    function swapToken(
+        address fromToken,
+        address toToken,
+        uint256 amountIn
+    ) external {
+        require(fromToken != toToken, "Cannot swap same token");
+        require(amountIn > 0, "Amount must be greater than zero");
+
+        IERC20 from = IERC20(fromToken);
+        IERC20 to = IERC20(toToken);
+
+        uint256 reserveFrom = from.balanceOf(address(this));
+        uint256 reserveTo = to.balanceOf(address(this));
+        require(reserveFrom > 0 && reserveTo > 0, "Insufficient liquidity");
+
+        uint256 amountOut = (amountIn * reserveTo) / (reserveFrom + amountIn);
+        require(amountOut > 0, "Amount too low");
+
+        // Transfer token dari pengguna ke kontrak
+        require(
+            from.allowance(msg.sender, address(this)) >= amountIn,
+            "Allowance too low"
+        );
+        from.transferFrom(msg.sender, address(this), amountIn);
+
+        // Transfer token hasil swap ke pengguna
+        to.transfer(msg.sender, amountOut);
     }
 }
